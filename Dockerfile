@@ -1,10 +1,9 @@
 ARG PYTORCH_RELEASE="23.08"
 ARG PYTHON_VERSION="3"
-ARG PORT="6060"
 
 FROM "nvcr.io/nvidia/pytorch:${PYTORCH_RELEASE}-py${PYTHON_VERSION}"
 
-EXPOSE ${PORT}/tcp
+EXPOSE 80/tcp
 WORKDIR /usr/local/bin
 
 RUN pip install --no-cache-dir transformers \
