@@ -15,7 +15,7 @@ chain = prompt | llm | output_parser
 
 def print_stream_generator(chain, input_query):
     for sent in chain.stream({"input":input_query}):
-        print(sent, end="")
+        print(sent, end="", flush=True)
     else:
         print()
 
