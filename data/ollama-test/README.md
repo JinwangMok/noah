@@ -19,7 +19,9 @@ That's it!
 I'm now testing ollama & langchian in below files.
 > 1. `ollama-simple-stream.py`: Just simple usage.
 > 
-> 2. 
+> 2. `ollama-retrieval-stream.py`: Document retrieval langchain example with bs4.
+>
+> 3. `ollama-conversation-retrieval-stream.py`: TBD.
 
 ---
 
