@@ -10,8 +10,8 @@ RUN pip install --upgrade pip \
     pip install --no-cache-dir transformers \
     langchain \
     pymysql \
-    beautifulsoup4 \ 
     faiss-cpu \
+    pyyaml \
     docker \
     nvidia-ml-py
 

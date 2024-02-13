@@ -26,7 +26,7 @@ I'm now testing ollama & langchian in below files.
 ---
 
 [Additional Dependencies]
-- beautifulsoup4, faiss-cpu,  
+- beautifulsoup4, faiss-cpu, "langserve[all]", fastapi
 
 ---
 
