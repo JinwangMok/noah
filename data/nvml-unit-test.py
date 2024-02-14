@@ -19,12 +19,12 @@ with open(model_size_fp, "r") as file:
     model_size_list = yaml.safe_load(file)['models']
 
 # (2) Get current GPU available memory.
-available_gpu_mem = None
+available_gpu_mem = 0
 occupied_mem_per_proc = {}
 device_count = pynvml.nvmlDeviceGetCount()
 for i in range(device_count):
     handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-    available_gpu_mem = pynvml.nvmlDeviceGetMemoryInfo(handle).free # Byte
+    available_gpu_mem += pynvml.nvmlDeviceGetMemoryInfo(handle).free # Byte
     try:
         procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
         for proc in procs:
