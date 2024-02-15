@@ -1,6 +1,6 @@
 #!/bin/bash
 
-output="./data/model_sizes.yaml"
+output="./llm_proxy/model_size.yaml"
 
 echo "models:" > $output
 

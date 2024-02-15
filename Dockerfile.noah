@@ -3,30 +3,35 @@ ARG PYTHON_VERSION="3"
 
 FROM "nvcr.io/nvidia/pytorch:${PYTORCH_RELEASE}-py${PYTHON_VERSION}"
 
+ARG NOAH_WORK_DIR
+ARG LANG_SERVER_PORT
+ARG NOAH_PROXY_PORT
+ARG LANG_SERVER_NAME
+ARG NETWORK_NAME
+
+ENV NOAH_WORK_DIR=${NOAH_WORK_DIR}
+ENV LANG_SERVER_PORT=${LANG_SERVER_PORT}
+ENV NOAH_PROXY_PORT=${NOAH_PROXY_PORT}
+ENV LANG_SERVER_NAME=${LANG_SERVER_NAME}
+ENV NETWORK_NAME=${NETWORK_NAME}
+
 EXPOSE 6060/tcp
 WORKDIR /usr/local/bin
 
-RUN pip install --upgrade pip \ 
-    pip install --no-cache-dir transformers \
-    langchain \
-    pymysql \
-    faiss-cpu \
-    pyyaml \
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir pyyaml \
     docker \
-    nvidia-ml-py
-
+    nvidia-ml-py \
+    Flask
 RUN apt-get update && apt-get install -y \
     git \
-    mysql-server \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-RUN mkdir ./noah \
-    && mkdir ./noah/data
+RUN mkdir ./llm_proxy
 
-# Configure MySQL (Later use)
-# RUN service mysql start && \
-#    mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION; FLUSH PRIVILEGES;" && \
-#    mysql -e "CREATE DATABASE IF NOT EXISTS ColorPalette;" \
-#    mysql -e "CREATE DATABASE IF NOT EXISTS Coop;" \
-#    mysql -e "CREATE DATABASE IF NOT EXISTS LLMold;"
+# 아래의 코드로 굳이 컨테이너를 실행할 때 llm_proxy 볼륨을 마운트할 필요가 없어짐.
+COPY ./llm_proxy /app/llm_proxy
+
+WORKDIR /app/llm_proxy
+CMD ["python", "noah_proxy.py"]
