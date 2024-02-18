@@ -6,8 +6,7 @@ echo "models:" > $output
 
 find ./models -type f \( -iname "*.gguf" -o -iname "*.ggml" \) | while read file; do
     size=$(stat -c %s "$file")
-    filename=$(basename "$file")
-    echo "  - name: $filename" >> $output
+    echo "  - path: $file" >> $output  
     echo "    size: $size" >> $output
 done
 
