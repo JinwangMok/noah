@@ -4,9 +4,11 @@
 
 # noah 관련 환경 변수 설정
 export NOAH_WORK_DIR=$(pwd)
-export LANG_SERVER_PORT=6061
-export NOAH_PROXY_PORT=6060
 export LANG_SERVER_NAME=lang_server
+export LANG_SERVER_PORT=6061
+export EXTERNAL_SERVER_NAME=172.0.0.1 # MobileX BE address
+export EXTERNAL_SERVER_PORT=8080      # MobileX BE port
+export NOAH_PROXY_PORT=6060
 export NETWORK_NAME=lang_pipe
 
 # 기타 환경 변수 설정
@@ -23,9 +25,11 @@ chmod +x update_model_size.sh
 docker pull ghcr.io/ggerganov/llama.cpp:server-cuda
 docker build -f Dockerfile.noah \
              --build-arg NOAH_WORK_DIR=$NOAH_WORK_DIR \
-             --build-arg LANG_SERVER_PORT=$LANG_SERVER_PORT \
-             --build-arg NOAH_PROXY_PORT=$NOAH_PROXY_PORT \
              --build-arg LANG_SERVER_NAME=$LANG_SERVER_NAME \
+             --build-arg LANG_SERVER_PORT=$LANG_SERVER_PORT \
+	     --build-arg EXTERNAL_SERVER_NAME=$EXTERNAL_SERVER_NAME \
+	     --build-arg EXTERNAL_SERVER_PORT=$EXTERNAL_SERVER_PORT \
+             --build-arg NOAH_PROXY_PORT=$NOAH_PROXY_PORT \
              --build-arg NETWORK_NAME=$NETWORK_NAME \
              -t noah:dev .
 

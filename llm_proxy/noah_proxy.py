@@ -1,4 +1,7 @@
 import os
+import sys
+import signal
+import atexit
 import time
 import yaml
 import json
@@ -6,25 +9,16 @@ import pynvml
 import docker
 import requests
 from flask import Flask, request, jsonify, Response
+import threading
 
-# Algorithm
-# [DONE]1. Get current local GPU avaliable status.
-# [DONE]2. Get available model size file.
-# [DONE]3. Select (run local LLM container) or (wait & using backend LLM container)
-# 4. Initial prepared  model proxy health check
-# 5. Run LLM proxy server.
-# 6. Run local GPU watcher.
-
-# TO DO
-# 1. Noah::Local Llama.cpp container control by GPU status (docker, nvml)
-# 2. Noah::response type handling for acting with langchain OpenAI class
+NOAH_PROXY_PORT = os.getenv('NOAH_PROXY_PORT')
 
 class Noah():
     def __init__(self):
         # Single GPU support untill now. (device:0)
         self.is_nvml_available = True
-
         try:
+            pynvml.nvmlInit()
             self.gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
         except pynvml.NVMLError as e:
             print(e)
@@ -33,7 +27,7 @@ class Noah():
             return
 
         with open('./model_size.yaml', 'r') as fp:
-            self.model_specs = yaml.safe_load(file)['models']
+            self.model_specs = yaml.safe_load(fp)['models']
         self.gpu_mem = pynvml.nvmlDeviceGetMemoryInfo(self.gpu_handle)
         self.selected_model_spec = self.__get_largest_llm_spec()
         self.gpu_mem_threshold = self.__calc_gpu_mem_threshold()             
@@ -43,11 +37,13 @@ class Noah():
         self.__docker_client = docker.from_env()
         self.__local_llm_container = None
         self.__WORK_DIR = os.getenv('NOAH_WORK_DIR')
+        self.__LANG_SERVER_NAME = os.getenv('LANG_SERVER_NAME')
         self.__LANG_SERVER_PORT = os.getenv('LANG_SERVER_PORT')
-        self.__NOAH_PROXY_PORT = os.getenv('NOAH_PROXY_PORT')
-        self.__SERVER_NAME = os.getenv('SERVER_NAME')
+        self.__EXTERNAL_SERVER_NAME = os.getenv('EXTERNAL_SERVER_NAME')
+        self.__EXTERNAL_SERVER_PORT = os.getenv('EXTERNAL_SERVER_PORT')
         self.__NETWORK_NAME = os.getenv('NETWORK_NAME')
-        self.__URL = f'http://{SERVER_NAME}:{LANG_SERVER_PORT}'
+        self.__LOCAL_URL = f'http://{self.__LANG_SERVER_NAME}:{self.__LANG_SERVER_PORT}'
+        self.__EXTERNAL_URL = f'http://{self.__EXTERNAL_SERVER_NAME}:{self.__EXTERNAL_SERVER_PORT}'
 
     def __get_largest_llm_spec(self):
         max_model_spec = {'path':None, 'size':0}
@@ -68,7 +64,7 @@ class Noah():
                     self.is_local_llm_running = self.__stop_local_llm()
                 if self.last_gpu_mem_used != self.gpu_mem.used:
                     # GPU memory has been changed.
-                    if self.__larger_llm_exists():
+                    if self.__check_larger_llm_exists():
                         self.is_local_llm_running = self.__stop_local_llm()
             else:
                 self.selected_model_spec = self.__get_largest_llm_spec()
@@ -77,7 +73,7 @@ class Noah():
             self.last_gpu_mem_used = self.gpu_mem.used
             time.sleep(0.5)
 
-    def __larger_llm_exists(self):
+    def __check_larger_llm_exists(self):
         for model_spec in self.model_specs:
             if model_spec['size'] < (self.gpu_mem.free + self.selected_model_spec['size']) and (self.selected_model_spec['path'] != model_spec['path']):
                 return True
@@ -94,19 +90,21 @@ class Noah():
             self.selected_model_spec = self.__get_largest_llm_spec()
 
     def __start_local_llm(self):
-        self.__local_llm_container = self.__docker_client.run(
+        self.__local_llm_container = self.__docker_client.containers.run(
                 "ghcr.io/ggerganov/llama.cpp:server-cuda",
                 command=f"-m {self.selected_model_spec['path'][2:]} --host 0.0.0.0 --port {self.__LANG_SERVER_PORT}",
-                name=self.__SERVER_NAME,
+                name=self.__LANG_SERVER_NAME,
                 detach=True,
                 device_requests=[docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])],
                 ipc_mode="host",
                 ulimits=[
-                    docker.types.Ulimit(name='memlock', soft=-1, hard=-1)
+                    docker.types.Ulimit(name='memlock', soft=-1, hard=-1),
+                    docker.types.Ulimit(name='stack', soft=67108864, hard=67108864)
                 ],
                 volumes={self.__WORK_DIR+"/models":{"bind":"/models"}},
                 network=self.__NETWORK_NAME
         )
+        time.sleep(3)
         tolerance = 10
         while not self.__local_llm_health_check():
             if tolerance <= 0:
@@ -128,38 +126,61 @@ class Noah():
         return True
 
     def __local_llm_health_check(self):
-        if requests.get(URL+'/health').json()['status'] == "ok":
+        if requests.get(self.__LOCAL_URL+'/health').json()['status'] == "ok":
             return True
         return False
 
+    def get_url(self):
+        if self.is_local_llm_running:
+            print(f"Request to {self.__LOCAL_URL}")
+            return self.__LOCAL_URL
+        else:
+            print(f"Request to {self.__EXTERNAL_URL}")
+            return self.__EXTERNAL_URL
     def __del__(self):
+        print("DELET is called")
         try:
             self.__local_llm_container.stop()
             self.__local_llm_container.remove()
         except pynvml.NVMLError as e:
             print(e)
-    
-def hello_world():
-    return 'BAD URI'
+
+app = Flask(__name__)
+noah = Noah()
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    # GPU / Backend Resource Checking
-    return jsonify(status='UP'), 200
+    data = request.args
+    url = noah.get_url()
+    response = requests.get(url+'/health').json() 
+    return response
 
 @app.route('/completion', methods=['POST'])
 def handle_completion():
-    # GPU / Backend Resource Logic
-    data = request.get_json()
-
+    data = request.json
     if not data:
         return jsonify(error='No data provided'), 400
-
+    url = noah.get_url()
+    response = requests.post(url+'/completion', json=data, stream=True)
     def generate():
-        for word in response.iter_line():
-            yield word
-    return Response(generate(), content_type=response.headers['Content-Type'])
-
+        for chunk in response.iter_lines():
+            if chunk:
+                yield json.dumps(chunk) 
+    return Response(generate(), mimetype='application/json')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=NOAH_PROXY_PORT)
+    def clean_up():
+        global noah
+        del noah
+    def cleaned_up_by_sig(signum, frame):
+        global noah
+        del noah
+        sys.exit(0)
+    atexit.register(clean_up)
+    signal.signal(signal.SIGINT, cleaned_up_by_sig)
+    signal.signal(signal.SIGTERM, cleaned_up_by_sig)
+    
+    thread = threading.Thread(target=noah.run)
+    thread.start()
+
+    app.run(host='0.0.0.0', port=NOAH_PROXY_PORT, debug=True, use_reloader=False)
