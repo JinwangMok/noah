@@ -48,10 +48,12 @@ noah_exists=$(docker ps -a | grep -c "noah")
 
 # 컨테이너가 존재하는 경우 삭제
 if [ $lang_server_exists -gt 0 ]; then
+  docker stop lang_server
   docker rm -f lang_server
 fi
 
 if [ $noah_exists -gt 0 ]; then
+  docker stop noah
   docker rm -f noah
 fi
 

@@ -1,7 +1,6 @@
 import json
 import requests
 
-import json, requests
 URL = 'http://localhost:6060'
 headers = {"Content-Type": "application/json"}
 data = {"prompt": "Building a website can be done in 10 simple steps:", "stream": True}
