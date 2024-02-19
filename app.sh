@@ -40,6 +40,21 @@ else
 	echo "Network $NETWORK_NAME already exists."
 fi
 
+# lang_server 컨테이너 존재 여부 확인
+lang_server_exists=$(docker ps -a | grep -c "lang_server")
+
+# noah 컨테이너 존재 여부 확인
+noah_exists=$(docker ps -a | grep -c "noah")
+
+# 컨테이너가 존재하는 경우 삭제
+if [ $lang_server_exists -gt 0 ]; then
+  docker rm -f lang_server
+fi
+
+if [ $noah_exists -gt 0 ]; then
+  docker rm -f noah
+fi
+
 # noah (proxy) 컨테이너 실행 (DooD) (-it 제거함)
 docker run -d --gpus all -v /var/run/docker.sock:/var/run/docker.sock -p 6060:6060 --network lang_pipe --name noah noah:dev
 

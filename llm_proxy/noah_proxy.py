@@ -145,8 +145,7 @@ class Noah():
         else:
             logger.debug(f"Request to {self.__EXTERNAL_URL}")
             return self.__EXTERNAL_URL
-    def __del__(self):
-        logger.debug("DELET is called")
+    def clean_up(self):
         try:
             self.__local_llm_container.stop()
             self.__local_llm_container.remove()
@@ -178,11 +177,13 @@ def handle_completion():
 
 if __name__ == '__main__':
     def clean_up():
+        logger.debug("clean_up called!")
         global noah
-        del noah
+        noah.clean_up()
     def cleaned_up_by_sig(signum, frame):
+        logger.debug("clean_up_by_sig called!")
         global noah
-        del noah
+        noah.clean_up()
         sys.exit(0)
     atexit.register(clean_up)
     signal.signal(signal.SIGINT, cleaned_up_by_sig)
