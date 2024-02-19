@@ -11,6 +11,14 @@ import requests
 from flask import Flask, request, jsonify, Response
 import threading
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+
 NOAH_PROXY_PORT = os.getenv('NOAH_PROXY_PORT')
 
 class Noah():
@@ -21,7 +29,7 @@ class Noah():
             pynvml.nvmlInit()
             self.gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
         except pynvml.NVMLError as e:
-            print(e)
+            logger.debug(e)
             self.is_nvml_available = False
             # valid check: Noah().is_nvml_available() 
             return
@@ -110,10 +118,10 @@ class Noah():
             if tolerance <= 0:
                 return False
             tolerance -= 1
-            print("Trying to health check of local LLM server...")
+            logger.debug("Trying to health check of local LLM server...")
             time.sleep(1)
         self.gpu_mem_threshold = self.__calc_gpu_mem_threshold()             
-        print("Local LLM server is now running!")
+        logger.debug("Local LLM server is now running!")
         return True
     
     def __stop_local_llm(self):
@@ -121,7 +129,7 @@ class Noah():
             self.__local_llm_container.stop()
             self.__local_llm_container.remove()
         except pynvml.NVMLError as e:
-            print(e)
+            logger.debug(e)
             return False
         return True
 
@@ -132,18 +140,18 @@ class Noah():
 
     def get_url(self):
         if self.is_local_llm_running:
-            print(f"Request to {self.__LOCAL_URL}")
+            logger.debug(f"Request to {self.__LOCAL_URL}")
             return self.__LOCAL_URL
         else:
-            print(f"Request to {self.__EXTERNAL_URL}")
+            logger.debug(f"Request to {self.__EXTERNAL_URL}")
             return self.__EXTERNAL_URL
     def __del__(self):
-        print("DELET is called")
+        logger.debug("DELET is called")
         try:
             self.__local_llm_container.stop()
             self.__local_llm_container.remove()
         except pynvml.NVMLError as e:
-            print(e)
+            logger.debug(e)
 
 app = Flask(__name__)
 noah = Noah()
@@ -157,15 +165,15 @@ def health_check():
 
 @app.route('/completion', methods=['POST'])
 def handle_completion():
-    data = request.json
+    data = request.json #dict
     if not data:
         return jsonify(error='No data provided'), 400
     url = noah.get_url()
-    response = requests.post(url+'/completion', json=data, stream=True)
+    response = requests.post(url+'/completion', headers={'Content-Type':'application/json'}, data=json.dumps(data), stream=True)
     def generate():
         for chunk in response.iter_lines():
             if chunk:
-                yield json.dumps(chunk) 
+                yield f"{chunk.decode('utf-8').split('data: ')[1]}\n".encode('utf-8') # class: bytes
     return Response(generate(), mimetype='application/json')
 
 if __name__ == '__main__':
