@@ -38,6 +38,9 @@ else
 	echo "Network $NETWORK_NAME already exists."
 fi
 
+# "dangling" 이미지 조회 및 삭제
+docker images -f "dangling=true" -q | xargs -r docker rmi
+
 # lang_server 컨테이너 존재 여부 확인
 lang_server_exists=$(docker ps -a | grep -c "lang_server")
 

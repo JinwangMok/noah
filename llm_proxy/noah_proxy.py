@@ -65,15 +65,20 @@ class Noah():
 
     def run(self):
         while True:
+            logger.debug("Polling NVIDIA GPU...")
+            logger.debug(self.gpu_mem_threshold)
+            logger.debug(self.gpu_mem.free)
             self.gpu_mem = pynvml.nvmlDeviceGetMemoryInfo(self.gpu_handle)
             if self.is_local_llm_running:
                 if self.gpu_mem.free < self.gpu_mem_threshold:
                     # Lack of GPU memory.
-                    self.is_local_llm_running = self.__stop_local_llm()
+                    self.is_local_llm_running = False
+                    self.__stop_local_llm()
                 if self.last_gpu_mem_used != self.gpu_mem.used:
                     # GPU memory has been changed.
                     if self.__check_larger_llm_exists():
-                        self.is_local_llm_running = self.__stop_local_llm()
+                        self.is_local_llm_running = False
+                        self.__stop_local_llm()
             else:
                 self.selected_model_spec = self.__get_largest_llm_spec()
                 if self.selected_model_spec['size'] > 0:
@@ -152,6 +157,27 @@ class Noah():
         except pynvml.NVMLError as e:
             logger.debug(e)
 
+
+class ResilientThread(threading.Thread):
+    def __init__(self, target, args=(), kwargs=None):
+        super().__init__()
+        self.target = target
+        self.args = args
+        self.kwargs = kwargs if kwargs is not None else {}
+        self.running = True
+
+    def run(self):
+        while self.running:
+            try:
+                self.target(*self.args, **self.kwargs)
+            except Exception as e:
+                logger.debug("Error occured in noah.run thread. Try to restart...")
+                time.sleep(1)
+
+    def stop(self):
+        self.running = False
+
+
 app = Flask(__name__)
 noah = Noah()
 
@@ -188,8 +214,8 @@ if __name__ == '__main__':
     atexit.register(clean_up)
     signal.signal(signal.SIGINT, cleaned_up_by_sig)
     signal.signal(signal.SIGTERM, cleaned_up_by_sig)
-    
-    thread = threading.Thread(target=noah.run)
+
+    thread = ResilientThread(target=noah.run)
     thread.start()
 
     app.run(host='0.0.0.0', port=NOAH_PROXY_PORT, debug=True, use_reloader=False)
