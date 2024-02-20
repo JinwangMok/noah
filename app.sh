@@ -9,10 +9,8 @@ export LANG_SERVER_PORT=6061
 export EXTERNAL_SERVER_NAME=172.0.0.1 # MobileX BE address
 export EXTERNAL_SERVER_PORT=8080      # MobileX BE port
 export NOAH_PROXY_PORT=6060
+export NOAH_APP_PORT=8501
 export NETWORK_NAME=lang_pipe
-
-# 기타 환경 변수 설정
-export WEB_SERVER_PORT=8080
 
 # ./models 안에 모델 다운로드 (향후 모델 다양하게 추가해야 함)
 
@@ -46,6 +44,9 @@ lang_server_exists=$(docker ps -a | grep -c "lang_server")
 # noah 컨테이너 존재 여부 확인
 noah_exists=$(docker ps -a | grep -c "noah")
 
+# noah_app 컨테이너 존재 여부 확인
+noah_app_exists=$(docker ps -a | grep -c "noah_app")
+
 # 컨테이너가 존재하는 경우 삭제
 if [ $lang_server_exists -gt 0 ]; then
   docker stop lang_server
@@ -57,10 +58,17 @@ if [ $noah_exists -gt 0 ]; then
   docker rm -f noah
 fi
 
+if [ $noah_app_exists -gt 0 ]; then
+  docker stop noah_app
+  docker rm -f noah_app
+fi
+
 # noah (proxy) 컨테이너 실행 (DooD) (-it 제거함)
-docker run -d --gpus all -v /var/run/docker.sock:/var/run/docker.sock -p 6060:6060 --network lang_pipe --name noah noah:dev
+docker run -d --gpus all -v /var/run/docker.sock:/var/run/docker.sock -p $NOAH_PROXY_PORT:$NOAH_PROXY_PORT --network lang_pipe --name noah noah:dev
 
 # 스트림릿 웹 서버 컨테이너 실행
+docker run -d -p $NOAH_APP_PORT:$NOAH_APP_PORT --network host --name noah_app noah_app
+
 
 # URL 출력
 
